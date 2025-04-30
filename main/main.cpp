@@ -56,6 +56,7 @@
 #include "main/main_timer_sync.h"
 #include "main/performance.h"
 #include "main/splash.gen.h"
+#include "modules/godot_tracy/tracy/public/tracy/Tracy.hpp"
 #include "modules/register_module_types.h"
 #include "platform/register_platform_apis.h"
 #include "scene/main/scene_tree.h"
@@ -130,6 +131,8 @@
 #include "modules/gdscript/language_server/gdscript_language_server.h"
 #endif // TOOLS_ENABLED && !GDSCRIPT_NO_LSP
 #endif // MODULE_GDSCRIPT_ENABLED
+
+#include "modules/godot_tracy/profiler.h"
 
 /* Static members */
 
@@ -4088,6 +4091,8 @@ bool Main::iteration() {
 	NavigationServer3D::get_singleton()->sync();
 
 	for (int iters = 0; iters < advance.physics_steps; ++iters) {
+		ZoneScopedN("Main::iteration::PhysicsProcess");
+
 		if (Input::get_singleton()->is_agile_input_event_flushing()) {
 			Input::get_singleton()->flush_buffered_events();
 		}
@@ -4120,24 +4125,32 @@ bool Main::iteration() {
 			break;
 		}
 
-		uint64_t navigation_begin = OS::get_singleton()->get_ticks_usec();
+		{
+			ZoneScopedN("Main::iteration::PhysicsProcess::Navigation");
 
-		NavigationServer3D::get_singleton()->process(physics_step * time_scale);
+			uint64_t navigation_begin = OS::get_singleton()->get_ticks_usec();
 
-		navigation_process_ticks = MAX(navigation_process_ticks, OS::get_singleton()->get_ticks_usec() - navigation_begin); // keep the largest one for reference
-		navigation_process_max = MAX(OS::get_singleton()->get_ticks_usec() - navigation_begin, navigation_process_max);
+			NavigationServer3D::get_singleton()->process(physics_step * time_scale);
 
-		message_queue->flush();
+			navigation_process_ticks = MAX(navigation_process_ticks, OS::get_singleton()->get_ticks_usec() - navigation_begin); // keep the largest one for reference
+			navigation_process_max = MAX(OS::get_singleton()->get_ticks_usec() - navigation_begin, navigation_process_max);
+
+			message_queue->flush();
+		}
+
+		{
+			ZoneScopedN("Main::iteration::PhysicsProcess::Physics");
 
 #ifndef _3D_DISABLED
-		PhysicsServer3D::get_singleton()->end_sync();
-		PhysicsServer3D::get_singleton()->step(physics_step * time_scale);
+			PhysicsServer3D::get_singleton()->end_sync();
+			PhysicsServer3D::get_singleton()->step(physics_step * time_scale);
 #endif // _3D_DISABLED
 
-		PhysicsServer2D::get_singleton()->end_sync();
-		PhysicsServer2D::get_singleton()->step(physics_step * time_scale);
+			PhysicsServer2D::get_singleton()->end_sync();
+			PhysicsServer2D::get_singleton()->step(physics_step * time_scale);
 
-		message_queue->flush();
+			message_queue->flush();
+		}
 
 		physics_process_ticks = MAX(physics_process_ticks, OS::get_singleton()->get_ticks_usec() - physics_begin); // keep the largest one for reference
 		physics_process_max = MAX(OS::get_singleton()->get_ticks_usec() - physics_begin, physics_process_max);
@@ -4266,6 +4279,7 @@ bool Main::iteration() {
 	}
 #endif
 
+	FrameMark;
 	return exit;
 }
 

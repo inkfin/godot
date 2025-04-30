@@ -42,6 +42,8 @@
 #include "core/templates/local_vector.h"
 #include "core/variant/typed_array.h"
 
+#include "modules/godot_tracy/profiler.h"
+
 #ifdef DEBUG_ENABLED
 
 struct _ObjectDebugLock {
@@ -754,6 +756,9 @@ Variant Object::callv(const StringName &p_method, const Array &p_args) {
 }
 
 Variant Object::callp(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
+	// [Tracy]: Profiling
+	ZoneScoped;
+
 	r_error.error = Callable::CallError::CALL_OK;
 
 	if (p_method == CoreStringName(free_)) {
